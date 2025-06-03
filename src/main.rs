@@ -48,11 +48,11 @@ struct HeartRateRecord {
     timestamp: DateTime<Utc>,
 }
 
-// 修复后的心率数据解析函数
+// Fixed heart rate data parsing function
 fn parse_heart_rate_data(text: &str) -> Result<Vec<HeartRateRecord>, Box<dyn std::error::Error>> {
     let lines: Vec<&str> = text.trim().lines()
         .map(|line| line.trim())
-        .filter(|line| !line.is_empty())  // 过滤空行
+        .filter(|line| !line.is_empty())  // Filter empty lines
         .collect();
 
     let mut records = Vec::new();
@@ -61,11 +61,11 @@ fn parse_heart_rate_data(text: &str) -> Result<Vec<HeartRateRecord>, Box<dyn std
 
     println!("Total non-empty lines: {}", lines.len());
 
-    // 第一步：分别收集心率值和时间戳
+    // Step 1: Collect heart rate values and timestamps separately
     for (i, line) in lines.iter().enumerate() {
-        // 尝试解析为心率值（数字）
+        // Try to parse as heart rate value (number)
         if let Ok(heart_rate) = line.parse::<f64>() {
-            // 检查心率值的合理范围 (30-220 BPM)
+            // Check reasonable heart rate range (30-220 BPM)
             if heart_rate >= 30.0 && heart_rate <= 220.0 {
                 heart_rates.push(heart_rate);
                 println!("Found heart rate: {} at line {}", heart_rate, i);
@@ -73,32 +73,32 @@ fn parse_heart_rate_data(text: &str) -> Result<Vec<HeartRateRecord>, Box<dyn std
             }
         }
 
-        // 尝试解析为时间戳
+        // Try to parse as timestamp
         if let Some(timestamp) = parse_chinese_datetime(line) {
             timestamps.push(timestamp);
             println!("Found timestamp: {} at line {}", timestamp, i);
             continue;
         }
 
-        // 如果既不是心率也不是时间戳，打印警告
+        // If neither heart rate nor timestamp, print warning
         println!("Warning: Could not parse line {}: '{}'", i, line);
     }
 
     println!("Found {} heart rates and {} timestamps", heart_rates.len(), timestamps.len());
 
-    // 第二步：配对心率和时间戳
+    // Step 2: Pair heart rates and timestamps
     let pairs_count = heart_rates.len().min(timestamps.len());
 
     if pairs_count == 0 {
         return Err("No valid heart rate and timestamp pairs found".into());
     }
 
-    // 根据数据格式，可能有几种配对方式：
-    // 1. 心率和时间戳按顺序交替出现
-    // 2. 所有心率在前，所有时间戳在后
-    // 3. 所有时间戳在前，所有心率在后
+    // Based on data format, there might be several pairing methods:
+    // 1. Heart rates and timestamps appear alternately in sequence
+    // 2. All heart rates first, all timestamps after
+    // 3. All timestamps first, all heart rates after
 
-    // 先尝试按顺序配对
+    // First try to pair in sequence
     for i in 0..pairs_count {
         records.push(HeartRateRecord {
             value: heart_rates[i],
@@ -106,12 +106,12 @@ fn parse_heart_rate_data(text: &str) -> Result<Vec<HeartRateRecord>, Box<dyn std
         });
     }
 
-    // 按时间戳排序，确保数据按时间顺序
+    // Sort by timestamp to ensure data is in chronological order
     records.sort_by_key(|record| record.timestamp);
 
     println!("Successfully created {} heart rate records", records.len());
 
-    // 打印前几条记录用于调试
+    // Print first few records for debugging
     for (i, record) in records.iter().take(5).enumerate() {
         println!("Record {}: {} BPM at {}", i + 1, record.value, record.timestamp);
     }
@@ -119,9 +119,9 @@ fn parse_heart_rate_data(text: &str) -> Result<Vec<HeartRateRecord>, Box<dyn std
     Ok(records)
 }
 
-// 解析中文日期时间格式：2025年6月2日 21:28
+// Parse Chinese datetime format: 2025年6月2日 21:28
 fn parse_chinese_datetime(datetime_str: &str) -> Option<DateTime<Utc>> {
-    // 使用正则表达式解析中文日期格式
+    // Use regex to parse Chinese date format
     let re = regex::Regex::new(r"(\d{4})年(\d{1,2})月(\d{1,2})日\s+(\d{1,2}):(\d{2})").ok()?;
 
     if let Some(caps) = re.captures(datetime_str) {
@@ -131,13 +131,13 @@ fn parse_chinese_datetime(datetime_str: &str) -> Option<DateTime<Utc>> {
         let hour: u32 = caps[4].parse().ok()?;
         let minute: u32 = caps[5].parse().ok()?;
 
-        // 假设时区为 UTC+8 (中国时区)
+        // Assume timezone is UTC+8 (China timezone)
         let naive = NaiveDateTime::new(
             chrono::NaiveDate::from_ymd_opt(year, month, day)?,
             chrono::NaiveTime::from_hms_opt(hour, minute, 0)?
         );
 
-        // 转换为 UTC (减去8小时)
+        // Convert to UTC (subtract 8 hours)
         let utc_time = naive - chrono::Duration::hours(8);
         return Some(DateTime::from_naive_utc_and_offset(utc_time, Utc));
     }
@@ -145,7 +145,7 @@ fn parse_chinese_datetime(datetime_str: &str) -> Option<DateTime<Utc>> {
     None
 }
 
-// 转换为 InfluxDB Line Protocol 格式
+// Convert to InfluxDB Line Protocol format
 fn to_influxdb_line(record: &HeartRateRecord, device_id: &str) -> String {
     let timestamp_ms = record.timestamp.timestamp_millis();
 
@@ -157,7 +157,7 @@ fn to_influxdb_line(record: &HeartRateRecord, device_id: &str) -> String {
     )
 }
 
-// 发送数据到 GreptimeDB
+// Send data to GreptimeDB
 async fn send_to_greptime(
     app_state: &AppState,
     lines: Vec<String>,
@@ -190,14 +190,14 @@ async fn send_to_greptime(
     Ok(())
 }
 
-// 主要的处理函数
+// Main processing function
 async fn process_heart_rate_text(
     axum::extract::State(app_state): axum::extract::State<AppState>,
     Query(params): Query<QueryParams>,
     body: Bytes,
 ) -> Result<ResponseJson<ApiResponse>, (StatusCode, String)> {
 
-    // 将字节转换为字符串
+    // Convert bytes to string
     let text = match String::from_utf8(body.to_vec()) {
         Ok(text) => text,
         Err(e) => {
@@ -213,7 +213,7 @@ async fn process_heart_rate_text(
     println!("First 500 characters of raw data:\n{}",
              if text.len() > 500 { &text[..500] } else { &text });
 
-    // 解析心率数据
+    // Parse heart rate data
     let records = match parse_heart_rate_data(&text) {
         Ok(records) => records,
         Err(e) => {
@@ -232,7 +232,7 @@ async fn process_heart_rate_text(
         }));
     }
 
-    // 转换为 InfluxDB Line Protocol
+    // Convert to InfluxDB Line Protocol
     let lines: Vec<String> = records
         .iter()
         .map(|record| to_influxdb_line(record, &device_id))
@@ -240,7 +240,7 @@ async fn process_heart_rate_text(
 
     println!("Generated {} InfluxDB lines", lines.len());
 
-    // 只打印前几行用于调试
+    // Only print first few lines for debugging
     println!("First few InfluxDB lines:");
     for (i, line) in lines.iter().take(3).enumerate() {
         println!("  {}: {}", i + 1, line);
@@ -249,7 +249,7 @@ async fn process_heart_rate_text(
         println!("  ... and {} more lines", lines.len() - 3);
     }
 
-    // 发送到 GreptimeDB
+    // Send to GreptimeDB
     if let Err(e) = send_to_greptime(&app_state, lines).await {
         eprintln!("Failed to send to GreptimeDB: {}", e);
         return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("GreptimeDB error: {}", e)));
@@ -264,16 +264,15 @@ async fn process_heart_rate_text(
     }))
 }
 
-// 健康检查端点
 async fn health_check() -> &'static str {
     "OK"
 }
 
 #[tokio::main]
 async fn main() {
-    // 从环境变量读取配置
+    // Read configuration from environment variables
     let greptime_url = std::env::var("GREPTIME_URL")
-        .unwrap_or_else(|_| "http://192.168.50.137:14000".to_string());
+        .unwrap_or_else(|_| "http://127.0.0.1".to_string());
     let greptime_db = std::env::var("GREPTIME_DB")
         .unwrap_or_else(|_| "heartbeat_test".to_string());
     let port = std::env::var("PORT")
