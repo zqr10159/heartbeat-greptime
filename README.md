@@ -1,4 +1,4 @@
-# heart-rate-proxy
+# heartbeat-greptime
 [中文](README_CN.md)
 
 This project is a toy tool for forwarding Apple Watch heart rate data to a GreptimeDB database. The service is built on the `axum` framework, provides HTTP interfaces, and supports asynchronous processing with high-performance data transfer.
